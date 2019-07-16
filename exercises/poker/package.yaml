@@ -8,8 +8,8 @@ library:
   exposed-modules: Poker
   source-dirs: src
   ghc-options: -Wall
-  # dependencies:
-  # - foo       # List here the packages you
+  dependencies:
+  - split
   # - bar       # want to use in your solution.
 
 tests:
