@@ -1,6 +1,9 @@
 module Poker (bestHands) where
 
+import Data.List (sort, sortBy, nub, group, groupBy, length)
+import Data.List.Extra (groupSortOn)
 import Data.List.Split (splitOn)
+import Control.Monad (msum)
 
 data Suit = Hearts | Spades | Diamonds | Clubs deriving (Eq)
 instance Ord Suit where
@@ -58,14 +61,13 @@ instance Show Card where
 
 data Hand = Hand Card Card Card Card Card
 
+instance Eq Hand where
+  hand1 == hand2 = (handToList hand1) == (handToList hand2)
+instance Ord Hand where
+  compare hand1 hand2 = compare (handToList hand2) (handToList hand1)
+
 instance Show Hand where
   show (Hand a b c d e) = (show a) ++ " " ++ (show b) ++ " " ++ (show c) ++ " " ++ (show d) ++ " " ++ (show e)
-
--- GOAL Function
-bestHands :: [String] -> Maybe [String]
-bestHands hands = Just hands
--- bestHands hands = parseHand hands
--- GOAL Function
 
 parseSuit :: Char -> Maybe Suit
 parseSuit 'H' = Just Hearts
@@ -98,49 +100,82 @@ parseCard _ = Nothing
 parseHand :: String -> Maybe Hand
 parseHand s = do
   x <- sequence $ parseCard <$> splitOn " " s
-  -- x :: List Card <- (sequence $ (parseCard <$> (splitOn " " s :: List String) :: List (Maybe Card)) :: Maybe (List Card))
-  toHand x
+  (toHand . reverse . sort) x
   where
     toHand (a : b : c : d : e : []) = Just $ Hand a b c d e
     toHand _ = Nothing
 
---isStraight :: Hand -> Boolean
---isStraight hand@(Hand c1 c2 c3 c4 c5) =
---  sortedHand
---  where
---  sortedHand = sort $ handToList hand
+-- (Works)
+isStraight :: Hand -> Maybe HandRank
+isStraight hand = case faces sortedHand of
+    (Two : Three : Four : Five : Ace : []) -> Just (Straight Five) -- Ace is high in our Ord instance, but it can be low.
+    sHand@(f1 : f2 : f3 : f4 : f5 : []) ->
+        if (succ f1 == f2
+		&& succ f2 == f3
+		&& succ f3 == f4
+		&& succ f4 == f5)
+        then Just (Straight f5)
+        else Nothing
+  where
+  sortedHand :: [Card]
+  sortedHand = handToList hand
+  faces :: [Card] -> [FaceValue]
+  faces cards = face <$> cards
+  
 
 handToList :: Hand -> [Card]
 handToList (Hand a b c d e) = [a, b, c, d, e]
 
+-- (Done)
+isFlush :: Hand -> Maybe HandRank
+isFlush hand = case length (nub suits) of
+    1 -> Just (Flush hand)
+    _ -> Nothing
+  where
+  suits :: [Suit]
+  suits = (map suit (handToList hand))
 
---  if c1 > c2 && c2 > c3 && c3 > c4 && c4 > c5
---    then true
---    else false
+isStraightFlush :: Hand -> Maybe HandRank
+isStraightFlush hand = isFlush hand >> isStraight hand >> (Just $ StraightFlush (face highestCard))
+  where highestCard = head $ (handToList hand)
 
--- data HandRank
---   -- = FiveOfAKind FaceValue -- No jokers, so not possible
---   = StraightFlush FaceValue
---   | FourOfAKind FaceValue
---   | FullHouse FaceValue
---   | Flush Hand
---   | Straight FaceValue
---   | ThreeOfAKind FaceValue
---   | TwoPair FaceValue FaceValue FaceValue
---   | Pair FaceValue FaceValue FaceValue FaceValue
---   | HighCard Hand
---   deriving (Show)
+-- [ [3H, 3S, 3C, 3D], [4S] ]
+isGroupedHand :: Hand -> Maybe HandRank
+isGroupedHand hand = case sortBy (\g1 g2 -> compare (length g2) (length g1)) groupedHand of
+  ( [c1, _, _, _] : _ ) -> Just (FourOfAKind (face c1))
+  ( [c1, _, _]    : [_, _] : [] ) -> Just (FullHouse (face c1))
+  ( [c1, _, _]    : _ ) -> Just (ThreeOfAKind (face c1))
+  ( [c1, _] : [c2, _] : [c3] : [] ) -> Just (TwoPair (face c1) (face c2) (face c3))
+  ( [c1, _] : [c2] : [c3] : [c4] : [] ) -> Just (Pair (face c1) (face c2) (face c3) (face c4))
+  _ -> Nothing
+  where
+  groupedHand :: [[Card]]
+  groupedHand = group (handToList hand)
 
---filterFlush :: Hand -> Maybe HandRank
---filterFlush h@(Hand (Card _ a) (Card _ b) (Card _ c) (Card _ d) (Card _ e)) = if (all (== a) [b,c,d,e])
---  then Just (Flush h)
---  else Nothing
+data HandRank
+  -- = FiveOfAKind FaceValue -- No jokers, so not possible
+  = StraightFlush FaceValue
+  | FourOfAKind FaceValue
+  | FullHouse FaceValue
+  | Flush Hand
+  | Straight FaceValue
+  | ThreeOfAKind FaceValue
+  | TwoPair FaceValue FaceValue FaceValue
+  | Pair FaceValue FaceValue FaceValue FaceValue
+  | HighCard Hand
+  deriving (Show, Eq, Ord)
 
--- filterStraight :: Hand -> Maybe HandRank
--- filterStraight hand = do
---  let faceValues = sort $ map face hand
---  let (a b c d e) = faceValues
 
+getHandRank :: Hand -> HandRank
+getHandRank hand =
+  case msum ([ isGroupedHand, isStraightFlush, isFlush, isStraight ] <*> pure hand) of
+    (Just x) -> x
+    Nothing -> HighCard hand
 
--- getHandRank :: Hand -> HandRank
--- getHandRank (Hand a b c d e) =
+-- GOAL Function
+bestHands :: [String] -> Maybe [String]
+bestHands hands = Just $ (head . groupSortOn (fmap getHandRank . parseHand)) hands
+  where
+  parsedHands :: [Maybe Hand]
+  parsedHands = map parseHand hands
+-- GOAL Function
