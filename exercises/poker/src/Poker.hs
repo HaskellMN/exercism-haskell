@@ -64,7 +64,7 @@ data Hand = Hand Card Card Card Card Card
 instance Eq Hand where
   hand1 == hand2 = (handToList hand1) == (handToList hand2)
 instance Ord Hand where
-  compare hand1 hand2 = compare (handToList hand2) (handToList hand1)
+  compare hand1 hand2 = compare (handToList hand1) (handToList hand2)
 
 instance Show Hand where
   show (Hand a b c d e) = (show a) ++ " " ++ (show b) ++ " " ++ (show c) ++ " " ++ (show d) ++ " " ++ (show e)
@@ -100,7 +100,7 @@ parseCard _ = Nothing
 parseHand :: String -> Maybe Hand
 parseHand s = do
   x <- sequence $ parseCard <$> splitOn " " s
-  (toHand . reverse . sort) x
+  toHand x
   where
     toHand (a : b : c : d : e : []) = Just $ Hand a b c d e
     toHand _ = Nothing
@@ -109,7 +109,7 @@ parseHand s = do
 isStraight :: Hand -> Maybe HandRank
 isStraight hand = case faces sortedHand of
     (Two : Three : Four : Five : Ace : []) -> Just (Straight Five) -- Ace is high in our Ord instance, but it can be low.
-    sHand@(f1 : f2 : f3 : f4 : f5 : []) ->
+    (f1 : f2 : f3 : f4 : f5 : []) ->
         if (succ f1 == f2
 		&& succ f2 == f3
 		&& succ f3 == f4
@@ -118,13 +118,13 @@ isStraight hand = case faces sortedHand of
         else Nothing
   where
   sortedHand :: [Card]
-  sortedHand = handToList hand
+  sortedHand = sort $ handToList hand
   faces :: [Card] -> [FaceValue]
   faces cards = face <$> cards
-  
+
 
 handToList :: Hand -> [Card]
-handToList (Hand a b c d e) = [a, b, c, d, e]
+handToList (Hand a b c d e) = sort [a, b, c, d, e]
 
 -- (Done)
 isFlush :: Hand -> Maybe HandRank
@@ -142,27 +142,39 @@ isStraightFlush hand = isFlush hand >> isStraight hand >> (Just $ StraightFlush 
 -- [ [3H, 3S, 3C, 3D], [4S] ]
 isGroupedHand :: Hand -> Maybe HandRank
 isGroupedHand hand = case sortBy (\g1 g2 -> compare (length g2) (length g1)) groupedHand of
-  ( [c1, _, _, _] : _ ) -> Just (FourOfAKind (face c1))
-  ( [c1, _, _]    : [_, _] : [] ) -> Just (FullHouse (face c1))
-  ( [c1, _, _]    : _ ) -> Just (ThreeOfAKind (face c1))
+  ( [c1, _, _, _] : [c2] : []) -> Just (FourOfAKind (face c1) (face c2))
+  ( [c1, _, _]    : [c2, _] : [] ) -> Just (FullHouse (face c1) (face c2))
+  ( [c1, _, _]    : [c2] : [c3] : []) -> Just (ThreeOfAKind (face c1) (face c2) (face c3))
   ( [c1, _] : [c2, _] : [c3] : [] ) -> Just (TwoPair (face c1) (face c2) (face c3))
   ( [c1, _] : [c2] : [c3] : [c4] : [] ) -> Just (Pair (face c1) (face c2) (face c3) (face c4))
   _ -> Nothing
   where
   groupedHand :: [[Card]]
-  groupedHand = group (handToList hand)
+  groupedHand = reverse . sort $ group (handToList hand)
+
+-- data HandRank
+--   -- = FiveOfAKind FaceValue -- No jokers, so not possible
+--   = StraightFlush FaceValue
+--   | FourOfAKind FaceValue
+--   | FullHouse FaceValue
+--   | Flush Hand
+--   | Straight FaceValue
+--   | ThreeOfAKind FaceValue
+--   | TwoPair FaceValue FaceValue FaceValue
+--   | Pair FaceValue FaceValue FaceValue FaceValue
+--   | HighCard Hand
+--   deriving (Show, Eq, Ord)
 
 data HandRank
-  -- = FiveOfAKind FaceValue -- No jokers, so not possible
-  = StraightFlush FaceValue
-  | FourOfAKind FaceValue
-  | FullHouse FaceValue
-  | Flush Hand
-  | Straight FaceValue
-  | ThreeOfAKind FaceValue
-  | TwoPair FaceValue FaceValue FaceValue
+  = HighCard Hand
   | Pair FaceValue FaceValue FaceValue FaceValue
-  | HighCard Hand
+  | TwoPair FaceValue FaceValue FaceValue
+  | ThreeOfAKind FaceValue FaceValue FaceValue
+  | Straight FaceValue
+  | Flush Hand
+  | FullHouse FaceValue FaceValue
+  | FourOfAKind FaceValue FaceValue
+  | StraightFlush FaceValue
   deriving (Show, Eq, Ord)
 
 
@@ -174,8 +186,12 @@ getHandRank hand =
 
 -- GOAL Function
 bestHands :: [String] -> Maybe [String]
-bestHands hands = Just $ (head . groupSortOn (fmap getHandRank . parseHand)) hands
+bestHands hands = fmap show <$> topHands <$> handRanks <$> parseHands hands
   where
-  parsedHands :: [Maybe Hand]
-  parsedHands = map parseHand hands
+  topHands :: [[Hand]] -> [Hand]
+  topHands = head . reverse
+  handRanks :: [Hand] -> [[Hand]]
+  handRanks = groupSortOn getHandRank
+  parseHands :: [String] -> Maybe [Hand]
+  parseHands hands = sequence $ parseHand <$> hands
 -- GOAL Function
