@@ -152,19 +152,6 @@ isGroupedHand hand = case sortBy (\g1 g2 -> compare (length g2) (length g1)) gro
   groupedHand :: [[Card]]
   groupedHand = reverse . sort $ group (handToList hand)
 
--- data HandRank
---   -- = FiveOfAKind FaceValue -- No jokers, so not possible
---   = StraightFlush FaceValue
---   | FourOfAKind FaceValue
---   | FullHouse FaceValue
---   | Flush Hand
---   | Straight FaceValue
---   | ThreeOfAKind FaceValue
---   | TwoPair FaceValue FaceValue FaceValue
---   | Pair FaceValue FaceValue FaceValue FaceValue
---   | HighCard Hand
---   deriving (Show, Eq, Ord)
-
 data HandRank
   = HighCard Hand
   | Pair FaceValue FaceValue FaceValue FaceValue
